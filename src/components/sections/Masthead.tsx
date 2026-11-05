@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { useEffect, useRef, type MouseEvent } from "react";
 import { Brand } from "@/components/shared/Brand";
 import { Frame } from "@/components/shared/Frame";
+import { MemberLink } from "@/components/shared/MemberLink";
 import { ReserveLink } from "@/components/shared/ReserveLink";
 import { StockObserver } from "@/components/shared/StockObserver";
 import { useInlineCtaVisible } from "@/hooks/use-inline-cta";
@@ -42,6 +43,7 @@ export function Masthead() {
               {link.label}
             </a>
           ))}
+          <MemberLink className="masthead-link" />
           <ReserveLink label={navCta} size="md" tone={inlineVisible ? "quiet" : "solid"} />
         </nav>
 
@@ -57,6 +59,7 @@ export function Masthead() {
                   {link.label}
                 </a>
               ))}
+              <MemberLink className="masthead-menu-link" />
               <ReserveLink label={navCta} size="lg" full className="mt-2" />
             </nav>
           </div>

@@ -13,6 +13,7 @@ import { Possibility } from "@/components/sections/Possibility";
 import { Recognition } from "@/components/sections/Recognition";
 import { FloatingCountdown } from "@/components/sections/FloatingCountdown";
 import { StickyReserve } from "@/components/sections/StickyReserve";
+import { Testimonials } from "@/components/sections/Testimonials";
 
 export default function Home() {
   return (
@@ -26,6 +27,7 @@ export default function Home() {
         <Pillars />
         <Outcomes />
         <About />
+        <Testimonials />
         <Fit />
         <Masterclass />
         <Faq />

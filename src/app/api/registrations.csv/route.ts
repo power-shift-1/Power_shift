@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { connection } from "next/server";
 
+import { CSV_BOM, csvIstTime, csvLine } from "@/lib/csv";
 import { getSupabase, REGISTRATIONS_TABLE } from "@/lib/supabase";
 
 // Supabase returns at most 1,000 rows per request by default, so the export reads in pages
@@ -11,12 +12,6 @@ const PAGE_SIZE = 1000;
 const MIN_PASSWORD_LENGTH = 20;
 
 const HEADER = ["Name", "Email", "Registered (IST)"];
-
-// India has no daylight saving time, so a fixed offset is exact.
-const IST_OFFSET_MS = 330 * 60_000;
-
-// Excel only reads a downloaded CSV as UTF-8 when it starts with a byte order mark.
-const BOM = "\uFEFF";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -75,7 +70,7 @@ export async function GET(request: Request) {
   let offset = 0;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(BOM + csvLine(HEADER)));
+      controller.enqueue(encoder.encode(CSV_BOM + csvLine(HEADER)));
     },
     async pull(controller) {
       try {
@@ -86,7 +81,7 @@ export async function GET(request: Request) {
           return;
         }
         offset += rows.length;
-        controller.enqueue(encoder.encode(rows.map((row) => csvLine([row.name, row.email, toIst(row.created_at)])).join("")));
+        controller.enqueue(encoder.encode(rows.map((row) => csvLine([row.name, row.email, csvIstTime(row.created_at)])).join("")));
       } catch (error) {
         // Failing the stream makes Excel report a failed refresh instead of loading a short list.
         console.error("[export] Could not read registrations:", error);
@@ -119,19 +114,4 @@ function isAuthorized(header: string | null, password: string) {
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest();
-}
-
-function csvLine(cells: string[]) {
-  return cells.map(csvCell).join(",") + "\r\n";
-}
-
-// Anyone can type a name into the form, and Excel runs a cell that starts with = + - or @ as a formula.
-function csvCell(value: string) {
-  const flat = value.replace(/[\p{Cc}\u2028\u2029]+/gu, " ");
-  const safe = /^[=+\-@]/.test(flat) ? `'${flat}` : flat;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-function toIst(timestamp: string) {
-  return new Date(Date.parse(timestamp) + IST_OFFSET_MS).toISOString().slice(0, 19).replace("T", " ");
 }

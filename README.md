@@ -74,9 +74,42 @@ To check the link from a terminal:
 curl -u excel:YOUR_EXPORT_PASSWORD https://<your-site>/api/registrations.csv
 ```
 
+## Members area
+
+Members sign up free with email and password or Google, at `/sign-up`. A free account gets the dashboard, announcements, the live session schedule and every lesson marked free. Each course is bought once through Razorpay, and buying one opens all of its lessons, its own chat room, its live session links and the members lounge. The team runs everything from `/admin`.
+
+**Setting it up:**
+
+1. In the Supabase SQL Editor, run `supabase/migrations/20261105120000_create_members.sql`, then `supabase/migrations/20261105180000_members_features.sql`, after the registrations migration. The second one also creates the two storage buckets: `avatars` (public profile photos) and `lesson-resources` (private lesson files, up to 50 MB each).
+2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (the publishable key starts with `sb_publishable_`). Keep `SUPABASE_SECRET_KEY` set too: payments and the members list need it.
+3. In Supabase, Authentication > URL Configuration: set the Site URL to the live address, and add `https://<your-site>/auth/callback` and `http://localhost:3000/auth/callback` to the Redirect URLs.
+4. For Google sign-in, create an OAuth client (type: Web application) in Google Cloud Console with the redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`, then paste its client ID and secret into Supabase under Authentication > Sign In / Providers > Google.
+5. Sign up on the site, then make that account the first admin in the SQL Editor:
+
+   ```sql
+   update public.profiles set role = 'admin'
+   where id = (select id from auth.users where email = 'you@example.com');
+   ```
+
+6. In Razorpay, copy the API keys into `NEXT_PUBLIC_RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. Add a webhook for `https://<your-site>/api/razorpay/webhook` with the events `order.paid`, `payment.captured` and `refund.processed`, and put its secret in `RAZORPAY_WEBHOOK_SECRET`. Test keys (`rzp_test_`) work end to end before the account's KYC is approved.
+7. Keep the business details in `business` in `src/lib/members-content.ts` up to date. They appear on `/terms`, `/privacy`, `/refunds` and `/contact`, which Razorpay checks before approving the account.
+8. Supabase's built-in email sender only sends a few emails an hour. Before launch, add your own SMTP sender under Authentication > Emails.
+
+**Videos:** paste a YouTube or Vimeo link into a lesson. Only members who may watch a lesson are ever sent its video ID. But anyone who has a YouTube link can still watch the video, so put paid lessons on Vimeo with privacy set to "Hide from Vimeo" and embedding allowed only on your domain.
+
+**Payments:** the buyer pays in Razorpay Checkout, and the site checks Razorpay's signature before opening the course. The webhook records the same purchase if the buyer closes the tab first, and a full refund in Razorpay takes the course away again. The price always comes from the database, never from the browser.
+
+**For members:** a progress ring on each course, lessons ticked off with "Mark as complete", worksheets and links under each lesson, a profile photo and bio, and a notification bell for new announcements, replies to their messages, and live sessions starting within a day. On phones, the members area has a bottom tab bar.
+
+**Community:** members reply to a message from its ⋯ menu, open someone's card by tapping their name, and report a message. Admins pin a message to the top of a room, mute someone in one room (for an hour, a day or until lifted), or remove a message from the same menu.
+
+**Admin jobs:** add courses, lessons and lesson resources, publish announcements, schedule live sessions with Zoom or Meet links, add a course to a member by hand, stop a member posting everywhere, set each room's topic, make a room read-only or put it in slow mode (Admin > Chat), and work through reported messages (Admin > Reports). The overview has daily charts of sign-ups and sales, and members and purchases download as CSV.
+
+To make someone else an admin, run the same SQL with their email. The admin panel can't do this on purpose.
+
 ## Changing things
 
-- **Words:** all copy is in `src/lib/content.ts`.
+- **Words:** the landing page's copy is in `src/lib/content.ts`, and the members area's in `src/lib/members-content.ts`.
 - **Colours and type:** tokens and type classes are in `src/app/globals.css`. Each section sets its colours through `data-stock`.
 - **Regenerating the hero crop and share image:** `node scripts/make-assets.mjs`.
 - **Turning WebGL off:** set `NEXT_PUBLIC_HORIZON_WEBGL=0`. The sun then shows as a static SVG, as it already does for reduced-motion users and slower devices.

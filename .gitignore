@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Raw testimonial videos and screenshots (hundreds of MB). The site uses copies in public/ or hosted links.
+/Testimonials/
