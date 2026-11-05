@@ -7,6 +7,11 @@ import { getSupabase, REGISTRATIONS_TABLE } from "@/lib/supabase";
 // until a page comes back empty. That still works if the project's limit is set lower.
 const PAGE_SIZE = 1000;
 
+// The route has no rate limit, so only a long password keeps guessing hopeless.
+const MIN_PASSWORD_LENGTH = 20;
+
+const HEADER = ["Name", "Email", "Registered (IST)"];
+
 // India has no daylight saving time, so a fixed offset is exact.
 const IST_OFFSET_MS = 330 * 60_000;
 
@@ -20,14 +25,17 @@ type Row = { name: string; email: string; created_at: string };
 /**
  * Every registration as a CSV, oldest first, for Excel's Data > Get Data > From Web.
  * Sign in with Basic: any user name, and REGISTRATIONS_EXPORT_PASSWORD as the password.
- * While that variable is not set, this route answers 404.
+ * While that variable is unset or shorter than 20 characters, this route answers 404.
  */
 export async function GET(request: Request) {
   // Always run per request. Otherwise a build without the password set prerenders the 404 and serves it for good.
   await connection();
 
   const password = process.env.REGISTRATIONS_EXPORT_PASSWORD;
-  if (!password) return new Response("Not found", { status: 404, headers: NO_STORE });
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    if (password) console.error(`[export] REGISTRATIONS_EXPORT_PASSWORD is shorter than ${MIN_PASSWORD_LENGTH} characters, so the export is off.`);
+    return new Response("Not found", { status: 404, headers: NO_STORE });
+  }
 
   if (!isAuthorized(request.headers.get("authorization"), password)) {
     return new Response("Sign in with the export password.", {
@@ -42,29 +50,52 @@ export async function GET(request: Request) {
     return new Response("Registrations are not connected yet.", { status: 503, headers: NO_STORE });
   }
 
-  const rows: Row[] = [];
-  for (;;) {
+  const readPage = async (offset: number): Promise<Row[]> => {
     const { data, error } = await supabase
       .from(REGISTRATIONS_TABLE)
       .select("name, email, created_at")
       .order("created_at")
       .order("id")
-      .range(rows.length, rows.length + PAGE_SIZE - 1);
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error;
+    return data;
+  };
 
-    if (error) {
-      console.error("[export] Could not read registrations:", error);
-      return new Response("Could not read registrations. Try again shortly.", { status: 502, headers: NO_STORE });
-    }
-    if (data.length === 0) break;
-    rows.push(...data);
+  // Reading the first page up front lets a failing database still get a clear 502.
+  let page: Row[] | null;
+  try {
+    page = await readPage(0);
+  } catch (error) {
+    console.error("[export] Could not read registrations:", error);
+    return new Response("Could not read registrations. Try again shortly.", { status: 502, headers: NO_STORE });
   }
 
-  const lines = [
-    ["Name", "Email", "Registered (IST)"],
-    ...rows.map((row) => [row.name, row.email, toIst(row.created_at)]),
-  ].map((cells) => cells.map(csvCell).join(","));
+  // Streamed page by page: Vercel refuses a buffered response over 4.5 MB.
+  const encoder = new TextEncoder();
+  let offset = 0;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(BOM + csvLine(HEADER)));
+    },
+    async pull(controller) {
+      try {
+        const rows = page ?? (await readPage(offset));
+        page = null;
+        if (rows.length === 0) {
+          controller.close();
+          return;
+        }
+        offset += rows.length;
+        controller.enqueue(encoder.encode(rows.map((row) => csvLine([row.name, row.email, toIst(row.created_at)])).join("")));
+      } catch (error) {
+        // Failing the stream makes Excel report a failed refresh instead of loading a short list.
+        console.error("[export] Could not read registrations:", error);
+        controller.error(error);
+      }
+    },
+  });
 
-  return new Response(BOM + lines.join("\r\n") + "\r\n", {
+  return new Response(body, {
     headers: {
       ...NO_STORE,
       "Content-Type": "text/csv; charset=utf-8",
@@ -88,6 +119,10 @@ function isAuthorized(header: string | null, password: string) {
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest();
+}
+
+function csvLine(cells: string[]) {
+  return cells.map(csvCell).join(",") + "\r\n";
 }
 
 // Anyone can type a name into the form, and Excel runs a cell that starts with = + - or @ as a formula.
