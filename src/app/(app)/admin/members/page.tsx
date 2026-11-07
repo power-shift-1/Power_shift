@@ -11,7 +11,7 @@ import { requireAdmin } from "@/lib/auth";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { createUserClient } from "@/lib/supabase/server";
 
-import { grantCourse, revokeCourse, setBanned } from "../actions";
+import { clearProfile, grantCourse, revokeCourse, setBanned } from "../actions";
 
 export const metadata: Metadata = { title: "Admin · Members" };
 
@@ -27,24 +27,27 @@ export default async function AdminMembers({ searchParams }: Props) {
   const query = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
   const supabase = (await createUserClient())!;
 
-  const [{ data: rows, error }, { data: courses }] = await Promise.all([
+  const [{ data: rows, error: membersError }, { data: courses, error: coursesError }] = await Promise.all([
     listMembers(supabase, query, PER_PAGE, (page - 1) * PER_PAGE),
     supabase.from("courses").select("id, title").order("sort"),
   ]);
-  if (error) console.error("[admin] List members:", error.code, error.message);
   const list = rows ?? [];
   const total = Number(list[0]?.total_count ?? 0);
   const first = (page - 1) * PER_PAGE + 1;
   const hasNext = first - 1 + list.length < total;
   const ids = list.map((row) => row.member_id);
 
-  const { data: purchases } = ids.length
+  const { data: purchases, error: purchasesError } = ids.length
     ? await supabase
         .from("purchases")
         .select("id, user_id, course_id, status, source, courses(title)")
         .in("user_id", ids)
         .overrideTypes<Purchase[], { merge: false }>()
-    : { data: [] as Purchase[] };
+    : { data: [] as Purchase[], error: null };
+
+  // Showing the list without its courses would offer courses members already own, so any failed read stops it.
+  const error = membersError ?? coursesError ?? purchasesError;
+  if (error) console.error("[admin] List members:", error.code, error.message);
 
   const pageLink = (target: number) => `/admin/members?page=${target}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
 
@@ -85,7 +88,7 @@ export default async function AdminMembers({ searchParams }: Props) {
               const ownedIds = new Set(owned.filter((p) => p.status === "paid").map((p) => p.course_id));
               const available = (courses ?? []).filter((course) => !ownedIds.has(course.id as string));
               return (
-                <li key={member.member_id} className="grid gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start">
+                <li key={member.member_id} className="grid grid-cols-1 gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start">
                   <div className="flex min-w-0 items-start gap-3">
                     <Avatar name={member.full_name || "Member"} src={member.avatar_url} size={40} />
                     <div className="min-w-0">
@@ -129,10 +132,10 @@ export default async function AdminMembers({ searchParams }: Props) {
                       <Empty>No courses.</Empty>
                     )}
                     {available.length ? (
-                      <ActionForm action={grantCourse} submitLabel="Add course" variant="outline" className="flex-row! items-end gap-3!">
+                      <ActionForm action={grantCourse} submitLabel="Add course" variant="outline" className="flex-row! flex-wrap items-end gap-3!">
                         <input type="hidden" name="user_id" value={member.member_id} />
-                        {/* Shrinks on a phone, so a long course title never pushes the row sideways. */}
-                        <SelectField id={`grant-${member.member_id}`} name="course_id" label="Add a course" className="min-w-0 flex-1 sm:max-w-xs">
+                        {/* Keeps a real width and lets the button and its message wrap below on a phone. */}
+                        <SelectField id={`grant-${member.member_id}`} name="course_id" label="Add a course" className="min-w-48 flex-1 sm:max-w-xs">
                           {available.map((course) => (
                             <option key={course.id} value={course.id}>
                               {course.title}
@@ -144,15 +147,27 @@ export default async function AdminMembers({ searchParams }: Props) {
                   </div>
 
                   {member.member_id === admin.id || member.role === "admin" ? null : (
-                    <ActionForm
-                      action={setBanned}
-                      submitLabel={member.banned_at ? "Let them post again" : "Stop them posting"}
-                      variant="outline"
-                      confirm={member.banned_at ? undefined : `Stop ${member.full_name || "this member"} posting in the community?`}
-                    >
-                      <input type="hidden" name="user_id" value={member.member_id} />
-                      <input type="hidden" name="banned" value={member.banned_at ? "false" : "true"} />
-                    </ActionForm>
+                    <div className="flex flex-col gap-3">
+                      <ActionForm
+                        action={setBanned}
+                        submitLabel={member.banned_at ? "Let them post again" : "Stop them posting"}
+                        variant="outline"
+                        confirm={member.banned_at ? undefined : `Stop ${member.full_name || "this member"} posting in the community?`}
+                      >
+                        <input type="hidden" name="user_id" value={member.member_id} />
+                        <input type="hidden" name="banned" value={member.banned_at ? "false" : "true"} />
+                      </ActionForm>
+                      {member.full_name || member.bio || member.avatar_url ? (
+                        <ActionForm
+                          action={clearProfile}
+                          submitLabel="Clear name, bio and photo"
+                          variant="ghost"
+                          confirm={`Clear ${member.full_name || "this member"}'s name, bio and photo? They can set them again unless they're stopped from posting.`}
+                        >
+                          <input type="hidden" name="user_id" value={member.member_id} />
+                        </ActionForm>
+                      ) : null}
+                    </div>
                   )}
                 </li>
               );

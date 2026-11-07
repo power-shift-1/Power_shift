@@ -58,7 +58,21 @@ export async function saveAvatar(url: string | null): Promise<{ ok: boolean }> {
   }
 
   const { error } = await session.supabase.from("profiles").update({ avatar_url: url }).eq("id", session.member.id);
-  if (error) console.error("[account] Could not save photo:", error.code, error.message);
+  if (error) {
+    console.error("[account] Could not save photo:", error.code, error.message);
+    return { ok: false };
+  }
+
+  // Earlier pictures would otherwise stay public forever, so everything but the current one goes.
+  const keep = url ? url.slice(folder.length) : null;
+  const avatars = session.supabase.storage.from("avatars");
+  const { data: files } = await avatars.list(session.member.id, { limit: 100 });
+  const stale = (files ?? []).filter((file) => file.name !== keep).map((file) => `${session.member.id}/${file.name}`);
+  if (stale.length) {
+    const { error: removeError } = await avatars.remove(stale);
+    if (removeError) console.error("[account] Could not remove old photos:", removeError.message);
+  }
+
   revalidatePath("/", "layout");
-  return { ok: !error };
+  return { ok: true };
 }

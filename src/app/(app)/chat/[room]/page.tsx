@@ -98,7 +98,9 @@ export default async function ChatRoomPage({ params }: Props) {
         <h1 className="mt-3 font-display text-[length:clamp(2rem,1.5rem+1.8vw,3rem)] leading-[1.1]">{name}</h1>
         {room.topic ? <p className="t-body mt-2 text-fg-soft">{room.topic}</p> : null}
       </div>
+      {/* Keyed so a page Next keeps alive in the background never shows another room's or another member's state. */}
       <ChatRoom
+        key={`${room.id}:${member.id}`}
         room={state}
         initial={initial}
         initialPinned={pinned ?? []}

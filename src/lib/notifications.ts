@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { formatDate, formatTime } from "@/lib/format";
+
 export type Notice = {
   id: number;
   kind: "announcement" | "reply" | "report";
@@ -12,13 +14,25 @@ export type Notice = {
   read_at: string | null;
 };
 
-export type SoonSession = { id: string; title: string; starts_at: string };
+/** `when` is ready to read: "today at 6:30 pm", "tomorrow at 10:00 am". */
+export type SoonSession = { id: string; title: string; starts_at: string; when: string };
 
 export const NOTICE_FIELDS = "id, kind, title, body, link, created_at, read_at";
 const SOON_MS = 24 * 60 * 60_000;
 const STARTED_MS = 30 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
 
-/** The bell's contents: the latest notifications, the unread count, and sessions starting within a day. */
+function describeStart(iso: string, now: number) {
+  const day = formatDate(iso);
+  const label = day === formatDate(new Date(now).toISOString()) ? "today" : day === formatDate(new Date(now + DAY_MS).toISOString()) ? "tomorrow" : day;
+  return `${label} at ${formatTime(iso)}`;
+}
+
+/**
+ * The bell's contents: the latest notifications, the unread count, and sessions starting within a day.
+ * Only sessions this member may join: the inner join on the joining link, which row level security
+ * withholds from everyone else, leaves out the rest.
+ */
 export async function loadBell(supabase: SupabaseClient) {
   const now = Date.now();
   const [latest, unread, soon] = await Promise.all([
@@ -31,12 +45,16 @@ export async function loadBell(supabase: SupabaseClient) {
     supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null),
     supabase
       .from("live_sessions")
-      .select("id, title, starts_at")
+      .select("id, title, starts_at, live_session_links!inner(session_id)")
       .gte("starts_at", new Date(now - STARTED_MS).toISOString())
       .lte("starts_at", new Date(now + SOON_MS).toISOString())
       .order("starts_at")
       .limit(3)
-      .overrideTypes<SoonSession[], { merge: false }>(),
+      .overrideTypes<{ id: string; title: string; starts_at: string }[], { merge: false }>(),
   ]);
-  return { items: latest.data ?? [], unread: unread.count ?? 0, soon: soon.data ?? [] };
+  return {
+    items: latest.data ?? [],
+    unread: unread.count ?? 0,
+    soon: (soon.data ?? []).map((session) => ({ id: session.id, title: session.title, starts_at: session.starts_at, when: describeStart(session.starts_at, now) })),
+  };
 }

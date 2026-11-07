@@ -55,10 +55,17 @@ export default async function AdminOverview({ searchParams }: Props) {
   const sum = (pick: (row: (typeof rows)[number]) => number) => rows.reduce((total, row) => total + pick(row), 0);
   const period = { signups: sum((row) => row.signups), purchases: sum((row) => row.purchases), sales: sum((row) => row.sales) };
 
+  // A count that failed to load shows a dash, never a zero that looks real.
+  const count = (result: { count: number | null; error: { code?: string; message: string } | null }, label: string) => {
+    if (result.error) console.error(`[admin] ${label}:`, result.error.code, result.error.message);
+    return result.error || result.count === null ? "–" : counts.format(result.count);
+  };
+  if (latest.error) console.error("[admin] Recent purchases:", latest.error.code, latest.error.message);
+
   const allTime = [
-    { label: "Members", value: counts.format(members.count ?? 0) },
-    { label: "From the masterclass", value: counts.format(attendees.count ?? 0) },
-    { label: "Courses sold", value: counts.format(sold.count ?? 0) },
+    { label: "Members", value: count(members, "Members") },
+    { label: "From the masterclass", value: count(attendees, "Masterclass attendees") },
+    { label: "Courses sold", value: count(sold, "Courses sold") },
     { label: "Sales", value: sales === null ? "–" : formatPrice(sales) },
   ];
   const inPeriod = [
@@ -91,7 +98,7 @@ export default async function AdminOverview({ searchParams }: Props) {
           ) : (
             <>
               <Stats stats={inPeriod} className="sm:grid-cols-3" />
-              <div className="grid gap-12 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
                 <DailyBarChart
                   id="signups"
                   title="Sign-ups per day"
@@ -146,7 +153,7 @@ export default async function AdminOverview({ searchParams }: Props) {
             ))}
           </ul>
         ) : (
-          <Empty>No purchases yet.</Empty>
+          <Empty>{latest.error ? "Could not load recent purchases. Please refresh the page." : "No purchases yet."}</Empty>
         )}
       </Panel>
     </AdminFrame>

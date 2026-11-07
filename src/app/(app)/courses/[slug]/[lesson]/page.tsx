@@ -43,7 +43,7 @@ export default async function LessonPage({ params }: Props) {
   const next = course.lessons[index + 1];
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div>
         <Link href={`/courses/${course.slug}`} className="t-note text-fg-soft hover:text-fg">
           ← {course.title}
@@ -91,7 +91,7 @@ export default async function LessonPage({ params }: Props) {
 
         {lesson.summary ? <p className="t-body mt-8 whitespace-pre-line text-fg-soft">{lesson.summary}</p> : null}
 
-        {canWatch ? <ResourceList supabase={supabase} lessonId={lesson.id} /> : null}
+        {canWatch ? <ResourceList supabase={supabase} lessonId={lesson.id} from={`/courses/${course.slug}/${lesson.id}`} /> : null}
 
         <nav aria-label="Lessons" className="mt-10 flex justify-between gap-4 border-t border-rule pt-5">
           {previous ? (

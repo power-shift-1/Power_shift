@@ -13,8 +13,8 @@ export const mastheadMember = {
 } as const;
 
 export const auth = {
-  notConfigured:
-    "Member accounts aren't switched on yet. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, as the README explains.",
+  // Shown to visitors, so it names no settings. The README says which ones to set.
+  notConfigured: "Member sign-in isn't switched on yet. Please check back soon.",
   signIn: {
     eyebrow: "Members",
     title: "Welcome back.",
@@ -112,7 +112,7 @@ export const courses = {
   buyPending: "Opening checkout…",
   buyConfirming: "Confirming your payment…",
   buyDone: "Payment received. The course is yours.",
-  buyFailed: "The payment didn't go through. You haven't been charged twice, so you can try again.",
+  buyFailed: "The payment didn't go through. If money left your account, it will be refunded, and you can try again.",
   buyUnavailable: "Payments aren't switched on yet.",
   buyNote: "One-time payment through Razorpay: UPI, cards, net banking and wallets.",
   lockedTitle: "This lesson is part of the course.",
@@ -126,11 +126,19 @@ export const courses = {
   undoComplete: "Mark as not complete",
   progress: (done: number, total: number) => `${done} of ${total} lessons complete`,
   courseComplete: "Course complete. Well done!",
+  watchAgain: "Watch again from the start",
   resourcesTitle: "Resources",
   download: "Download",
   openLink: "Open",
   resourceUnavailable: "This file can't be opened right now. Please try again shortly.",
 } as const;
+
+/** "every 30 seconds", "a minute", "every 5 minutes". */
+export function slowEvery(seconds: number) {
+  if (seconds === 60) return "a minute";
+  if (seconds > 60 && seconds % 60 === 0) return `every ${seconds / 60} minutes`;
+  return `every ${seconds} ${seconds === 1 ? "second" : "seconds"}`;
+}
 
 export const community = {
   eyebrow: "Community",
@@ -168,7 +176,9 @@ export const community = {
   done: "Done",
   reportFailed: "The report didn't send. You may have reported this message already.",
   roomLocked: "This room is read-only for now.",
-  slowMode: (seconds: number) => `Slow mode is on: one message every ${seconds < 60 ? `${seconds} seconds` : `${Math.round(seconds / 60)} min`}.`,
+  slowMode: (seconds: number) => `Slow mode: one message ${slowEvery(seconds)}.`,
+  readOnlyTag: "Read-only",
+  slowTag: "Slow mode",
   slowWait: "Slow mode is on. Please wait a little before your next message.",
   muted: (until: string | null) => (until ? `You're muted in this room until ${until}.` : "You're muted in this room."),
   mute: "Mute",
@@ -179,14 +189,26 @@ export const community = {
   ],
   memberCard: "About",
   noBio: "No bio yet.",
+  team: "Team",
+  teamHint: "From The Power Shift team",
+  newMessage: (name: string) => `New message from ${name}`,
+  skipToComposer: "Skip to the message box",
+  pinFailed: "That pin didn't save. Please try again.",
+  muteDone: (label: string) => `Done: ${label.charAt(0).toLowerCase()}${label.slice(1)}.`,
+  muteFailed: "That mute didn't save. Please try again.",
+  removeFailed: "That message couldn't be removed. Please try again.",
+  moreActions: (name: string) => `More actions for ${name}'s message`,
 } as const;
 
 export const notifications = {
   title: "Notifications",
-  open: (count: number) => (count ? `Notifications, ${count} unread` : "Notifications"),
+  open: (unread: number, soon: number) =>
+    ["Notifications", unread ? `${unread} unread` : null, soon ? `${soon} live ${soon === 1 ? "session" : "sessions"} soon` : null]
+      .filter(Boolean)
+      .join(", "),
   empty: "You're all caught up.",
-  markAll: "Mark all as read",
-  clear: "Clear",
+  unread: "Unread",
+  clear: "Clear all",
   sessionSoon: (when: string) => `Live session ${when}`,
 } as const;
 
@@ -212,6 +234,7 @@ export const account = {
   photoRemove: "Remove photo",
   photoUploading: "Uploading…",
   photoSaved: "Photo updated.",
+  photoRemoved: "Photo removed.",
   photoTooBig: "Please choose a picture under 2 MB.",
   photoWrongType: "Please choose a JPG, PNG or WebP picture.",
   photoFailed: "The photo didn't upload. Please try again.",

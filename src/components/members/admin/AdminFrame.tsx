@@ -19,7 +19,7 @@ export function AdminFrame({ title, lead, children }: { title: string; lead?: st
     <div className="flex flex-col gap-10">
       <PageIntro eyebrow="Admin" title={title} lead={lead} />
       <div className="-mt-6 border-b border-rule">
-        <MemberNav items={ADMIN_NAV} />
+        <MemberNav items={ADMIN_NAV} label="Admin sections" />
       </div>
       {children}
     </div>
@@ -28,5 +28,5 @@ export function AdminFrame({ title, lead, children }: { title: string; lead?: st
 
 /** A two-column admin row: what exists, and the form to add more. */
 export function AdminColumns({ children }: { children: ReactNode }) {
-  return <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">{children}</div>;
+  return <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_420px]">{children}</div>;
 }

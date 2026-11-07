@@ -11,7 +11,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function MembersLayout({ children }: { children: ReactNode }) {
   return (
-    <div data-stock="paper" className="flex min-h-svh flex-col">
+    <div data-stock="paper" data-members-area="" className="flex min-h-svh flex-col">
       <MemberHeader />
       <main id="top" className="frame w-full flex-1 py-10 lg:py-14">
         {children}

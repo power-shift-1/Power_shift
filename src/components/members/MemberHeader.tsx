@@ -49,7 +49,8 @@ async function SignedInPart() {
       <MemberNav items={items} className={DESKTOP_NAV} />
       {member ? (
         <div className="ml-auto flex items-center gap-2 md:gap-3">
-          {bell ? <NotificationBell memberId={member.id} initial={bell} /> : null}
+          {/* Keyed by member: Next can keep this header alive across a sign-out and a different sign-in. */}
+          {bell ? <NotificationBell key={member.id} memberId={member.id} initial={bell} /> : null}
           <Link href="/account" aria-label={account.title} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
             <Avatar name={member.name} src={member.avatarUrl} size={32} />
           </Link>

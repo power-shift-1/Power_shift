@@ -29,6 +29,21 @@ export async function completedByCourse(supabase: SupabaseClient) {
   return counts;
 }
 
+type OutlineLesson = { id: string; title: string; is_free: boolean; courses: { slug: string; title: string; cover_url: string | null } };
+
+/** The first lesson in a course's order that the member hasn't finished and may watch, if any. */
+export async function nextLesson(supabase: SupabaseClient, courseSlug: string, owns: boolean) {
+  const { data } = await supabase
+    .from("lessons")
+    .select("id, title, is_free, sort, courses!inner(slug, title, cover_url)")
+    .eq("courses.slug", courseSlug)
+    .order("sort")
+    .overrideTypes<OutlineLesson[], { merge: false }>();
+  const lessons = data ?? [];
+  const done = await completedLessonIds(supabase, lessons.map((lesson) => lesson.id));
+  return lessons.find((lesson) => !done.has(lesson.id) && (owns || lesson.is_free)) ?? null;
+}
+
 export function share(done: number, total: number) {
   return total ? Math.min(1, done / total) : 0;
 }

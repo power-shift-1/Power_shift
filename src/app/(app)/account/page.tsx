@@ -46,7 +46,7 @@ export default async function AccountPage() {
         </form>
       </PageIntro>
 
-      <div className="grid gap-12 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
         <Panel title={account.profileTitle}>
           <p className="font-ui text-[17px] font-semibold">{member.email}</p>
           {profile?.attended_masterclass ? <p className="t-note text-label">{account.attendee}</p> : null}

@@ -10,7 +10,14 @@ import type { ChatMessage } from "@/lib/chat";
 import { community } from "@/lib/members-content";
 
 /** Asks for an optional reason, then files the report. Admins are notified by the database. */
-export function ReportDialog({ message, onClose }: { message: ChatMessage | null; onClose: () => void }) {
+type Props = {
+  message: ChatMessage | null;
+  onClose: () => void;
+  /** Where focus goes afterwards: the menu that opened the dialog has closed, so Radix has nothing to return to. */
+  onClosed: () => void;
+};
+
+export function ReportDialog({ message, onClose, onClosed }: Props) {
   const [reason, setReason] = useState("");
   const [result, setResult] = useState<"ok" | "error" | null>(null);
   const [pending, startTransition] = useTransition();
@@ -24,10 +31,14 @@ export function ReportDialog({ message, onClose }: { message: ChatMessage | null
   return (
     <Dialog.Root open={message !== null} onOpenChange={(open) => (open ? null : close())}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(14_15_18/.45)] data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgb(14_15_18/.45)] data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none" />
         <Dialog.Content
           data-stock="paper"
-          className="fixed top-1/2 left-1/2 z-50 w-[min(460px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 border border-rule p-6 shadow-[0_24px_60px_rgb(14_15_18/.25)] outline-none"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            onClosed();
+          }}
+          className="fixed top-1/2 left-1/2 z-50 max-h-[calc(100svh-32px)] w-[min(460px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-rule p-6 shadow-[0_24px_60px_rgb(14_15_18/.25)] outline-none"
         >
           <Dialog.Title className="font-display text-[1.75rem] leading-[1.15]">{community.reportTitle}</Dialog.Title>
           {message ? (

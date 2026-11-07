@@ -1,7 +1,6 @@
 "use client";
 
 import { Upload } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 import { addFileResource } from "@/app/(app)/admin/actions";
@@ -24,7 +23,6 @@ function safeName(name: string) {
  * through the site's server. Storage policies only let admins write there.
  */
 export function ResourceUploader({ lessonId }: { lessonId: string }) {
-  const router = useRouter();
   const file = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -42,15 +40,16 @@ export function ResourceUploader({ lessonId }: { lessonId: string }) {
       const path = `${lessonId}/${Date.now().toString(36)}-${safeName(chosen.name)}`;
       const { error } = await supabase.storage.from("lesson-resources").upload(path, chosen, { contentType: chosen.type || undefined });
       if (error) {
-        setMessage({ ok: false, text: `Upload failed: ${error.message}` });
+        console.error("[admin] Lesson file upload failed:", error.message);
+        setMessage({ ok: false, text: "The file didn't upload. Please try again." });
         return;
       }
+      // addFileResource revalidates the page, so the new resource appears without a router refresh.
       const result = await addFileResource({ lessonId, title: title.trim() || chosen.name, path, size: chosen.size });
       setMessage({ ok: Boolean(result.ok), text: result.message ?? "" });
       if (result.ok) {
         setTitle("");
         if (file.current) file.current.value = "";
-        router.refresh();
       } else {
         // The record failed, so don't leave an orphaned file behind.
         await supabase.storage.from("lesson-resources").remove([path]);

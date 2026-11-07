@@ -850,3 +850,17 @@
     animation: hero-dash-grow 480ms var(--ease-draw) both;
   }
 }
+
+/* Members area ---------------------------------------------------------------------------------- */
+
+/* The sticky 64px header would otherwise cover whatever keyboard focus or an in-page link scrolls to. */
+html:has([data-members-area]) {
+  scroll-padding-top: 80px;
+}
+
+/* On phones the keyboard lifts the fixed tab bar over the chat box and forms, so it steps aside while typing. */
+@media (max-width: 767px) {
+  body:has(:is(input:not([type="checkbox"], [type="radio"], [type="file"]), textarea, select):focus) .members-tabbar {
+    display: none;
+  }
+}

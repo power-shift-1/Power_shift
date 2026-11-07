@@ -1,7 +1,7 @@
 "use server";
 
 import { memberClient } from "@/lib/auth";
-import { MESSAGE_FIELDS, MESSAGE_PAGE, type ChatMessage, type MemberCard } from "@/lib/chat";
+import { MESSAGE_FIELDS, MESSAGE_PAGE, PINNED_LIMIT, type ChatMessage, type MemberCard } from "@/lib/chat";
 import { auth, community } from "@/lib/members-content";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,7 +33,8 @@ export async function postMessage(roomId: string, body: string, replyTo: number 
 async function whyRefused(session: NonNullable<Awaited<ReturnType<typeof memberClient>>>, roomId: string) {
   if (session.member.isBanned) return community.banned;
   const [{ data: mute }, { data: room }] = await Promise.all([
-    session.supabase.from("chat_mutes").select("muted_until").eq("room_id", roomId).maybeSingle(),
+    // Admins can read everyone's mutes, so look only at this member's.
+    session.supabase.from("chat_mutes").select("muted_until").eq("room_id", roomId).eq("user_id", session.member.id).maybeSingle(),
     session.supabase.from("chat_rooms").select("is_locked").eq("id", roomId).maybeSingle(),
   ]);
   if (mute && (mute.muted_until === null || Date.parse(mute.muted_until) > Date.now())) return community.muted(null);
@@ -53,6 +54,35 @@ export async function loadOlder(roomId: string, beforeId: number): Promise<ChatM
     .limit(MESSAGE_PAGE)
     .overrideTypes<ChatMessage[], { merge: false }>();
   return (data ?? []).reverse();
+}
+
+/**
+ * What the room missed while it was away: messages after the newest one shown, and the current pins.
+ * Realtime doesn't replay, so the room calls this whenever its channel (re)joins.
+ */
+export async function catchUp(roomId: string, afterId: number): Promise<{ messages: ChatMessage[]; pinned: ChatMessage[] } | null> {
+  const session = await memberClient();
+  if (!session || !UUID.test(roomId) || !Number.isSafeInteger(afterId) || afterId < 0) return null;
+  const [newer, pinned] = await Promise.all([
+    session.supabase
+      .from("chat_messages")
+      .select(MESSAGE_FIELDS)
+      .eq("room_id", roomId)
+      .gt("id", afterId)
+      .order("id")
+      .limit(200)
+      .overrideTypes<ChatMessage[], { merge: false }>(),
+    session.supabase
+      .from("chat_messages")
+      .select(MESSAGE_FIELDS)
+      .eq("room_id", roomId)
+      .not("pinned_at", "is", null)
+      .order("pinned_at", { ascending: false })
+      .limit(PINNED_LIMIT)
+      .overrideTypes<ChatMessage[], { merge: false }>(),
+  ]);
+  if (newer.error || pinned.error) return null;
+  return { messages: newer.data ?? [], pinned: pinned.data ?? [] };
 }
 
 /** Admins only: row level security turns anyone else's delete into a no-op. */

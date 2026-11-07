@@ -40,6 +40,8 @@ type Course = {
 
 type Props = { params: Promise<{ id: string }> };
 
+const PROVIDERS = { youtube: "YouTube", vimeo: "Vimeo" } as const;
+
 function LessonFields({ courseId, lesson, nextSort }: { courseId: string; lesson?: Lesson; nextSort: number }) {
   const prefix = lesson ? `lesson-${lesson.id}` : "lesson-new";
   const media = lesson?.lesson_media;
@@ -137,8 +139,10 @@ export default async function AdminCourse({ params }: Props) {
                         {lesson.sort}. {lesson.title}
                       </span>
                       <span className="t-note text-fg-soft">
-                        {lesson.is_free ? "Free" : "Paid"} · {lesson.lesson_media ? lesson.lesson_media.provider : "no video"}
-                        {lesson.lesson_resources.length ? ` · ${lesson.lesson_resources.length} resources` : ""}
+                        {lesson.is_free ? "Free" : "Paid"} · {lesson.lesson_media ? PROVIDERS[lesson.lesson_media.provider] : "No video"}
+                        {lesson.lesson_resources.length
+                          ? ` · ${lesson.lesson_resources.length} ${lesson.lesson_resources.length === 1 ? "resource" : "resources"}`
+                          : ""}
                       </span>
                     </summary>
                     <div className="mt-5 flex flex-col gap-6 pb-3">

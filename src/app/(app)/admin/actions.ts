@@ -7,6 +7,7 @@ import { z } from "zod";
 import { memberClient } from "@/lib/auth";
 import { fail, ok, type FormState } from "@/lib/form-state";
 import { istInputToIso } from "@/lib/format";
+import { getSupabase } from "@/lib/supabase";
 import { parseVideoUrl } from "@/lib/video";
 
 // Every action re-checks the session. Row level security enforces the same rule in the database.
@@ -117,11 +118,32 @@ export async function deleteCourse(_previous: FormState, formData: FormData): Pr
   const id = uuid.safeParse(formData.get("id"));
   if (!id.success) return fail("That course no longer exists.");
 
+  const files = await resourceFiles(session.supabase, "lessons.course_id", id.data);
   const { error } = await session.supabase.from("courses").delete().eq("id", id.data);
   if (error?.code === "23503") return fail("Someone has bought this course, so it can't be deleted. Unpublish it instead.");
   if (error) return dbFailure("Delete course", error);
+  await removeFiles(session.supabase, files);
   revalidatePath("/", "layout");
   redirect("/admin/courses");
+}
+
+type Client = NonNullable<Awaited<ReturnType<typeof adminSession>>>["supabase"];
+
+/** Storage paths of the lesson files that a lesson or course deletion is about to orphan. */
+async function resourceFiles(supabase: Client, column: "lesson_id" | "lessons.course_id", value: string) {
+  const query =
+    column === "lesson_id"
+      ? supabase.from("lesson_resources").select("storage_path").eq("lesson_id", value)
+      : supabase.from("lesson_resources").select("storage_path, lessons!inner(course_id)").eq("lessons.course_id", value);
+  const { data } = await query;
+  return (data ?? []).flatMap((row) => (row.storage_path ? [row.storage_path as string] : []));
+}
+
+/** Rows cascade away with their lesson, but storage files don't, so they're removed here. */
+async function removeFiles(supabase: Client, paths: string[]) {
+  if (!paths.length) return;
+  const { error } = await supabase.storage.from("lesson-resources").remove(paths);
+  if (error) console.error("[admin] Could not remove lesson files:", error.message);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -173,8 +195,10 @@ export async function deleteLesson(_previous: FormState, formData: FormData): Pr
   if (!session) return DENIED;
   const id = uuid.safeParse(formData.get("id"));
   if (!id.success) return fail("That lesson no longer exists.");
+  const files = await resourceFiles(session.supabase, "lesson_id", id.data);
   const { error } = await session.supabase.from("lessons").delete().eq("id", id.data);
   if (error) return dbFailure("Delete lesson", error);
+  await removeFiles(session.supabase, files);
   revalidatePath("/", "layout");
   return ok("Lesson deleted.");
 }
@@ -279,10 +303,44 @@ export async function grantCourse(_previous: FormState, formData: FormData): Pro
   if (!parsed.success) return fail("Please choose a course.");
 
   const { error } = await session.supabase.from("purchases").insert({ ...parsed.data, source: "admin", amount_paise: 0 });
-  if (error?.code === "23505") return fail("They already have this course.");
-  if (error) return dbFailure("Grant course", error);
+  if (error?.code === "23505") {
+    // One row per member and course: a refunded purchase is turned back on as a hand grant. Clearing the
+    // payment ID means a replayed refund webhook for the old payment can't take it away again.
+    const { data: restored, error: restoreError } = await session.supabase
+      .from("purchases")
+      .update({ status: "paid", source: "admin", amount_paise: 0, payment_id: null, order_id: null })
+      .eq("user_id", parsed.data.user_id)
+      .eq("course_id", parsed.data.course_id)
+      .eq("status", "refunded")
+      .select("id");
+    if (restoreError) return dbFailure("Grant course", restoreError);
+    if (!restored?.length) return fail("They already have this course.");
+  } else if (error) {
+    return dbFailure("Grant course", error);
+  }
   revalidatePath("/", "layout");
   return ok("Course added.");
+}
+
+/** Blanks a member's name, bio and picture, and deletes their uploaded pictures. */
+export async function clearProfile(_previous: FormState, formData: FormData): Promise<FormState> {
+  const session = await adminSession();
+  if (!session) return DENIED;
+  const id = uuid.safeParse(formData.get("user_id"));
+  if (!id.success) return fail("That member no longer exists.");
+
+  const { error } = await session.supabase.rpc("admin_clear_profile", { target: id.data });
+  if (error) return dbFailure("Clear profile", error);
+
+  // Storage only lets members manage their own folder, so the secret key removes the files.
+  const service = getSupabase();
+  if (service) {
+    const avatars = service.storage.from("avatars");
+    const { data: files } = await avatars.list(id.data, { limit: 1000 });
+    if (files?.length) await avatars.remove(files.map((file) => `${id.data}/${file.name}`));
+  }
+  revalidatePath("/", "layout");
+  return ok("Name, bio and photo cleared.");
 }
 
 /** Only courses the team added by hand. A paid course is taken back by refunding it in Razorpay. */

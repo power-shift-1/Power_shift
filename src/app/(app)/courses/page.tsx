@@ -43,7 +43,7 @@ export default async function CoursesPage() {
     <div className="flex flex-col gap-10">
       <PageIntro eyebrow={copy.eyebrow} title={copy.title} lead={copy.lead} />
       {list?.length ? (
-        <ul className="grid gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((course) => {
             const total = course.lessons[0]?.count ?? 0;
             const done = completed.get(course.id) ?? 0;
@@ -57,7 +57,7 @@ export default async function CoursesPage() {
                     <span className="t-note shrink-0">{!course.is_published ? copy.draft : owns ? copy.owned : formatPrice(course.price_paise)}</span>
                   </div>
                   <p className="t-note mt-1 text-fg-soft">{owns && total ? copy.progress(done, total) : copy.lessons(total)}</p>
-                  {owns && total ? <ProgressBar value={share(done, total)} label={copy.progress(done, total)} className="mt-2" /> : null}
+                  {owns && total ? <ProgressBar value={share(done, total)} label={copy.progress(done, total)} decorative className="mt-2" /> : null}
                   {course.summary ? <p className="mt-3 line-clamp-3 font-ui text-[15px] leading-[1.55] text-fg-soft">{course.summary}</p> : null}
                 </Link>
               </li>

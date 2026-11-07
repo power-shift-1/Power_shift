@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { requireMember } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { courses as courseCopy, dashboard } from "@/lib/members-content";
-import { completedByCourse, share } from "@/lib/progress";
+import { completedByCourse, nextLesson, share } from "@/lib/progress";
 import { createUserClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Dashboard · The Power Shift" };
@@ -65,8 +65,17 @@ export default async function DashboardPage() {
   const firstName = member.name.split(/\s+/)[0] ?? member.name;
   const ownedCourses = (owned.data ?? []).flatMap((row) => (row.courses ? [row.courses] : []));
   const recent = (progress.data ?? []).filter((row) => row.lessons?.courses);
-  // Up next: the latest lesson still in progress, else a free lesson to begin with.
-  const resume = recent.find((row) => !row.completed_at)?.lessons ?? null;
+  // Up next: the lesson last watched if it isn't finished, else the next unfinished one in that course,
+  // else a free lesson to begin with.
+  const latest = recent[0];
+  const latestCourse = latest?.lessons?.courses;
+  const resume = !latest
+    ? null
+    : !latest.completed_at
+      ? latest.lessons
+      : latestCourse
+        ? await nextLesson(supabase, latestCourse.slug, ownedCourses.some((course) => course.slug === latestCourse.slug))
+        : null;
   const starter = (freeLessons.data ?? []).find((lesson) => lesson.courses?.is_published) ?? null;
   const upNext = resume ?? (recent.length ? null : starter);
   const totalDone = [...completed.values()].reduce((sum, n) => sum + n, 0);
@@ -76,7 +85,7 @@ export default async function DashboardPage() {
       <section data-stock="royal" className="relative -mx-[var(--gx)] -mt-10 overflow-hidden lg:-mt-14">
         <div aria-hidden="true" className="absolute -top-24 -right-24 size-80 rounded-full border border-[color-mix(in_oklch,var(--gold-line),transparent_50%)]" />
         <div aria-hidden="true" className="absolute -top-10 -right-10 size-52 rounded-full border border-[color-mix(in_oklch,var(--gold-line),transparent_70%)]" />
-        <div className="relative grid gap-8 px-[var(--gx)] py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:items-end lg:py-14">
+        <div className="relative grid grid-cols-1 gap-8 px-[var(--gx)] py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:items-end lg:py-14">
           <div>
             <Eyebrow dash>{dashboard.eyebrow}</Eyebrow>
             <h1 className="mt-4 font-display text-[length:clamp(2.5rem,1.8rem+2.8vw,4.25rem)] leading-[1.02] tracking-[-0.015em]">
@@ -120,7 +129,7 @@ export default async function DashboardPage() {
       >
         {ownedCourses.length ? (
           // Swipes sideways on phones; a grid from tablets up.
-          <ul className="-mx-[var(--gx)] flex snap-x snap-mandatory gap-4 overflow-x-auto px-[var(--gx)] pb-2 [scrollbar-width:thin] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3">
+          <ul className="-mx-[var(--gx)] flex snap-x snap-mandatory scroll-px-[var(--gx)] gap-4 overflow-x-auto px-[var(--gx)] pb-2 [scrollbar-width:thin] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3">
             {ownedCourses.map((course) => {
               const total = course.lessons[0]?.count ?? 0;
               const done = completed.get(course.id) ?? 0;
@@ -129,7 +138,7 @@ export default async function DashboardPage() {
                   <Link href={`/courses/${course.slug}`} className="group block border border-rule p-4 transition-colors hover:border-t-ink">
                     <CourseCover title={course.title} src={course.cover_url} />
                     <div className="mt-4 flex items-center gap-4">
-                      <ProgressRing value={share(done, total)} size={52} label={courseCopy.progress(done, total)} />
+                      <ProgressRing value={share(done, total)} size={52} label={courseCopy.progress(done, total)} decorative />
                       <div className="min-w-0">
                         <h3 className="truncate font-ui text-[17px] font-semibold group-hover:underline group-hover:underline-offset-4">{course.title}</h3>
                         <p className="t-note text-fg-soft">{courseCopy.progress(done, total)}</p>
@@ -157,7 +166,7 @@ export default async function DashboardPage() {
         )}
       </Panel>
 
-      <div className="grid gap-12 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
         <Panel title={dashboard.continueTitle}>
           {recent.length ? (
             <ul className="flex flex-col divide-y divide-rule">
@@ -190,7 +199,7 @@ export default async function DashboardPage() {
 
       <Panel title={dashboard.announcementsTitle} action={<Megaphone aria-hidden="true" className="size-5 text-label" />}>
         {announcements.data?.length ? (
-          <ul className="grid gap-6 md:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {announcements.data.map((item) => (
               <li key={item.id} className="border-l-[3px] border-l-gold-line pl-4">
                 <p className="t-note text-fg-soft">

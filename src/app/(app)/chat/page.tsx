@@ -36,7 +36,7 @@ export default async function ChatRoomsPage() {
   return (
     <div className="flex flex-col gap-10">
       <PageIntro eyebrow={community.eyebrow} title={community.title} lead={community.lead} />
-      <ul className="grid gap-4 md:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {rooms.map((room, index) => {
           const open = access[index]?.data === true;
           const href = open ? `/chat/${room.slug}` : room.courses ? `/courses/${room.courses.slug}` : "/courses";
@@ -54,8 +54,8 @@ export default async function ChatRoomsPage() {
                   {room.topic ? <span className="mt-0.5 block font-ui text-[15px] text-fg-soft">{room.topic}</span> : null}
                   <span className="t-note mt-1 block text-fg-soft">
                     {open ? community.open : room.course_id ? community.lockedCourse : community.locked}
-                    {open && room.is_locked ? ` · ${community.roomLocked}` : ""}
-                    {open && room.slow_mode_seconds ? ` · ${community.slowMode(room.slow_mode_seconds)}` : ""}
+                    {open && room.is_locked ? ` · ${community.readOnlyTag}` : ""}
+                    {open && room.slow_mode_seconds ? ` · ${community.slowTag}` : ""}
                   </span>
                 </span>
               </Link>

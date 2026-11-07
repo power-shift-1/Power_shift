@@ -10,6 +10,8 @@ export type ChatMessage = {
   reply_author: string | null;
   reply_excerpt: string | null;
   pinned_at: string | null;
+  /** Set by the database from the author's role, so it can be trusted where the name can't. */
+  author_is_admin: boolean;
 };
 
 export type RoomState = {
@@ -21,9 +23,9 @@ export type RoomState = {
   mutedUntil?: string | null;
 };
 
-export type MemberCard = { full_name: string; avatar_url: string | null; bio: string };
+export type MemberCard = { full_name: string; avatar_url: string | null; bio: string; is_team: boolean };
 
 export const MESSAGE_FIELDS =
-  "id, room_id, user_id, author_name, author_avatar, body, created_at, reply_to, reply_author, reply_excerpt, pinned_at";
+  "id, room_id, user_id, author_name, author_avatar, body, created_at, reply_to, reply_author, reply_excerpt, pinned_at, author_is_admin";
 export const MESSAGE_PAGE = 50;
 export const PINNED_LIMIT = 3;

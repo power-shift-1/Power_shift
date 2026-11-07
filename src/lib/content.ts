@@ -226,7 +226,7 @@ const featuredNote: Testimonial = {
   monogram: "S",
   detail: "The Leadership Power Code",
   paragraphs: [
-    "After going through your sessions I know how to prioritise, How to be non judgemental... how to be more empathetic, Different leadership styles, how to manage stress and most importantly what is the impact that I am creating with my own behaviour. These sessions were very important for me. I started taking care of myself. I evolved. I became self confident. I know my worth and I don’t depend on others anymore for their validation.",
+    "After going through your sessions I know how to prioritise, How to be non judgemental... how to be more empathetic, Different leadership styles, how to manage stress and most importantly what is the impact that I am creating with my own behaviour. These sessions were very important for me. I started taking care of myself. I evolved I became self confident. I know my worth and I don’t depend on others anymore for their validation.",
   ],
   emphasis: ["most importantly what is the impact that I am creating with my own behaviour"],
 };
@@ -261,7 +261,7 @@ const testimonialNotes: readonly Testimonial[] = [
   {
     name: "Mukesh Bansal",
     monogram: "MB",
-    detail: "Business and Technology Leader, Author",
+    detail: "Business and Technology Leader",
     source: "LinkedIn comment",
     paragraphs: [
       "Manisha Agrawal thanks a lot for your mentoring and support to push me to achieve my dream of book publication. Your regular mentoring from last 11 months transformed me to a very positive and self sufficient personality with healthy relationships with family and stakeholders",
@@ -298,6 +298,8 @@ const testimonialNotes: readonly Testimonial[] = [
       "What an amazing session on Power*N led by our in-house agile coach Manisha Agrawal, hosted by Aptiv Technical Center India, DEI Council for women in engineering.",
       "We witnessed how yielding power lies well within us yet we continuously let the YES and NO battle in our mind and let the negativity win. More often than not perfection is the enemy of progress. The role-playing was just apt for us to resonate.",
       "It is so natural to be emotional yet we are trying to park it during the day and venting it on soft targets. STOP - it is okay to be human.",
+      "Opportunity yes, just pass by as we wait for NOTHING, yet what we do when \"O\" comes knocking on the door?",
+      "Do we network with the right people who bring forth positivity and value in our lives? Time to reflect",
     ],
   },
   {
@@ -357,7 +359,7 @@ export const testimonials = {
   featured: {
     // Whole sentences from the end of the note, so the cut is marked with an ellipsis.
     quote:
-      "… I started taking care of myself. I evolved. I became self confident. I know my worth and I don’t depend on others anymore for their validation.",
+      "… I started taking care of myself. I evolved I became self confident. I know my worth and I don’t depend on others anymore for their validation.",
     note: featuredNote,
     fullNote: "Read the full note",
   },

@@ -27,7 +27,7 @@ export function TabLinks({ isAdmin, pathname }: { isAdmin: boolean; pathname?: s
     <nav
       aria-label="Members"
       data-stock="paper"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-rule pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="members-tabbar fixed inset-x-0 bottom-0 z-40 border-t border-rule pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="flex">
         {items.map((item) => {

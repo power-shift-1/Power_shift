@@ -7,20 +7,14 @@ import { CheckboxField, Field, SelectField } from "@/components/members/Field";
 import { Empty, Panel } from "@/components/members/PageIntro";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
-import { community } from "@/lib/members-content";
+import { community, slowEvery } from "@/lib/members-content";
 import { createUserClient } from "@/lib/supabase/server";
 
 import { deleteChatMessage, liftMute, updateRoomSettings } from "../actions";
 
 export const metadata: Metadata = { title: "Admin · Chat" };
 
-const SLOW_OPTIONS = [
-  { value: 0, label: "Off" },
-  { value: 10, label: "One message every 10 seconds" },
-  { value: 30, label: "Every 30 seconds" },
-  { value: 60, label: "Every minute" },
-  { value: 300, label: "Every 5 minutes" },
-];
+const SLOW_OPTIONS = [0, 10, 30, 60, 300].map((value) => ({ value, label: value ? `One message ${slowEvery(value)}` : "Off" }));
 
 type Room = { id: string; slug: string; name: string; course_id: string | null; topic: string; is_locked: boolean; slow_mode_seconds: number };
 type Mute = { room_id: string; user_id: string; muted_until: string | null; created_at: string };
@@ -57,7 +51,7 @@ export default async function AdminChat() {
   return (
     <AdminFrame title="Chat" lead="Set each room's topic, make it read-only, or slow it down. Pin, mute or remove from the message's ⋯ menu inside the room.">
       <Panel title="Rooms">
-        <ul className="grid gap-6 lg:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {(rooms ?? []).map((room) => (
             <li key={room.id} className="border border-rule p-5">
               <div className="mb-4 flex items-baseline justify-between gap-3">
@@ -71,7 +65,7 @@ export default async function AdminChat() {
                 <Field id={`topic-${room.id}`} name="topic" label="Topic (shown under the room's name)" maxLength={300} defaultValue={room.topic} />
                 <SelectField id={`slow-${room.id}`} name="slow_mode_seconds" label="Slow mode" defaultValue={String(room.slow_mode_seconds)}>
                   {SLOW_OPTIONS.some((option) => option.value === room.slow_mode_seconds) ? null : (
-                    <option value={room.slow_mode_seconds}>Every {room.slow_mode_seconds} seconds</option>
+                    <option value={room.slow_mode_seconds}>One message {slowEvery(room.slow_mode_seconds)}</option>
                   )}
                   {SLOW_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>

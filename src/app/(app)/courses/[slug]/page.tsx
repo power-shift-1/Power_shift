@@ -41,7 +41,9 @@ export default async function CoursePage({ params }: Props) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={course.cover_url} alt="" className="absolute inset-0 size-full object-cover opacity-35" />
         ) : null}
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[var(--royal-deep)] via-[color-mix(in_oklch,var(--royal-deep),transparent_25%)] to-transparent" />
+        {/* An even tint over the whole picture, deeper at the foot, keeps every line of text readable on light covers. */}
+        <div aria-hidden="true" className="absolute inset-0 bg-[color-mix(in_oklch,var(--royal-deep),transparent_30%)]" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[var(--royal-deep)] to-transparent" />
         <div className="relative flex flex-col gap-6 px-[var(--gx)] pt-10 pb-10 lg:flex-row lg:items-end lg:justify-between lg:pt-16 lg:pb-14">
           <div className="max-w-3xl">
             <Link href="/courses" className="t-note text-fg-soft hover:text-fg">
@@ -58,7 +60,7 @@ export default async function CoursePage({ params }: Props) {
           </div>
           {hasAccess && course.lessons.length ? (
             <div className="flex items-center gap-4">
-              <ProgressRing value={progress} size={84} label={copy.progress(done.size, course.lessons.length)} />
+              <ProgressRing value={progress} size={84} label={copy.progress(done.size, course.lessons.length)} onDark decorative />
               <p className="t-note max-w-40 text-fg-soft">
                 {progress >= 1 ? copy.courseComplete : copy.progress(done.size, course.lessons.length)}
               </p>
@@ -67,7 +69,7 @@ export default async function CoursePage({ params }: Props) {
         </div>
       </header>
 
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div>
           {course.summary ? <p className="t-body whitespace-pre-line text-fg-soft">{course.summary}</p> : null}
 
@@ -112,7 +114,7 @@ export default async function CoursePage({ params }: Props) {
               {next ? (
                 <Button asChild variant="reserve" size="lg" className="w-full justify-between">
                   <Link href={`/courses/${course.slug}/${next.id}`}>
-                    <span>{done.size ? `${copy.next}: ${next.title}` : copy.open}</span>
+                    <span>{progress >= 1 ? copy.watchAgain : done.size ? `${copy.next}: ${next.title}` : copy.open}</span>
                     <Arrow />
                   </Link>
                 </Button>

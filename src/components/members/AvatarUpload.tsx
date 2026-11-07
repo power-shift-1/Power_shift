@@ -1,7 +1,6 @@
 "use client";
 
 import { Camera } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 import { saveAvatar } from "@/app/(app)/account/actions";
@@ -17,7 +16,6 @@ const MAX_BYTES = 2 * 1024 * 1024;
 
 /** Uploads straight from the browser into the member's own folder; storage policies refuse any other folder. */
 export function AvatarUpload({ memberId, name, src }: { memberId: string; name: string; src: string | null }) {
-  const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -35,17 +33,17 @@ export function AvatarUpload({ memberId, name, src }: { memberId: string; name: 
       const path = `${memberId}/${Date.now().toString(36)}.${extension}`;
       const { error } = await supabase.storage.from("avatars").upload(path, file, { contentType: file.type, cacheControl: "31536000" });
       const url = error ? null : supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      // saveAvatar revalidates the page itself, so no router.refresh() is needed.
       const saved = url ? await saveAvatar(url) : { ok: false };
+      if (url && !saved.ok) await supabase.storage.from("avatars").remove([path]);
       setMessage(saved.ok ? { tone: "ok", text: account.photoSaved } : { tone: "error", text: account.photoFailed });
-      if (saved.ok) router.refresh();
     });
   }
 
   function remove() {
     startTransition(async () => {
       const saved = await saveAvatar(null);
-      if (saved.ok) router.refresh();
-      else setMessage({ tone: "error", text: account.photoFailed });
+      setMessage(saved.ok ? { tone: "ok", text: account.photoRemoved } : { tone: "error", text: account.photoFailed });
     });
   }
 

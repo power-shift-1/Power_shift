@@ -36,7 +36,10 @@ create table public.notifications (
   body text not null default '' check (char_length(body) <= 300),
   link text check (link is null or (link ~ '^/' and char_length(link) <= 300)),
   created_at timestamptz not null default now(),
-  read_at timestamptz
+  read_at timestamptz,
+  -- What it is about, so removing the message or announcement removes the notification too (see below).
+  message_id bigint,
+  announcement_id uuid references public.announcements (id) on delete cascade
 );
 create index notifications_user_idx on public.notifications (user_id, created_at desc);
 
@@ -50,8 +53,13 @@ alter table public.chat_messages
   -- Copied from the message being answered, so a reply still reads well after the original is removed.
   add column reply_author text,
   add column reply_excerpt text,
-  add column pinned_at timestamptz;
+  add column pinned_at timestamptz,
+  -- Set by the database from the author's role, so a member can't pass as the team by changing their name.
+  add column author_is_admin boolean not null default false;
 create index chat_messages_pinned_idx on public.chat_messages (room_id, pinned_at desc) where pinned_at is not null;
+
+alter table public.notifications
+  add constraint notifications_message_fk foreign key (message_id) references public.chat_messages (id) on delete cascade;
 
 create table public.chat_reports (
   id uuid primary key default gen_random_uuid(),
@@ -95,19 +103,22 @@ language sql stable security definer set search_path = '' as $$
     and (public.is_admin() or exists (select 1 from public.chat_rooms where id = target and not is_locked));
 $$;
 
+-- Not banned, at most 20 reports an hour, and only messages in rooms you can read that aren't your own.
 create function public.can_report(target bigint) returns boolean
 language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.chat_messages m
-    where m.id = target and m.user_id <> auth.uid() and public.can_access_room(m.room_id)
-  );
+  select not public.is_banned()
+    and (select count(*) from public.chat_reports r where r.reporter_id = auth.uid() and r.created_at > now() - interval '1 hour') < 20
+    and exists (
+      select 1 from public.chat_messages m
+      where m.id = target and m.user_id <> auth.uid() and public.can_access_room(m.room_id)
+    );
 $$;
 
 -- What another member sees on someone's card in chat: only people they share a room with.
 create function public.member_card(target uuid)
-returns table (full_name text, avatar_url text, bio text)
+returns table (full_name text, avatar_url text, bio text, is_team boolean)
 language sql stable security definer set search_path = '' as $$
-  select p.full_name, p.avatar_url, p.bio from public.profiles p
+  select p.full_name, p.avatar_url, p.bio, p.role = 'admin' from public.profiles p
   where p.id = target
     and auth.uid() is not null
     and (
@@ -145,9 +156,22 @@ begin
     where coalesce(search, '') = ''
        or p.full_name ilike '%' || search || '%'
        or u.email ilike '%' || search || '%'
-    order by p.created_at desc
+    -- The id breaks ties, so paging through members never repeats or skips anyone with the same join time.
+    order by p.created_at desc, p.id desc
     limit least(greatest(coalesce(page_size, 50), 1), 5000)
     offset greatest(coalesce(page_offset, 0), 0);
+end;
+$$;
+
+-- Admins only: blank out a member's name, bio and picture, for profiles that break the community rules.
+-- Their uploaded picture files are removed by the site with the storage API.
+create function public.admin_clear_profile(target uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can clear profiles.' using errcode = '42501';
+  end if;
+  update public.profiles set full_name = '', bio = '', avatar_url = null where id = target;
 end;
 $$;
 
@@ -190,9 +214,10 @@ begin
   new.body := btrim(new.body);
   new.pinned_at := null;
 
-  select coalesce(nullif(p.full_name, ''), 'Member'), p.avatar_url
-    into new.author_name, new.author_avatar
+  select coalesce(nullif(p.full_name, ''), 'Member'), p.avatar_url, p.role = 'admin'
+    into new.author_name, new.author_avatar, new.author_is_admin
     from public.profiles p where p.id = new.user_id;
+  new.author_is_admin := coalesce(new.author_is_admin, false);
 
   -- A reply must answer a message in the same room.
   new.reply_author := null;
@@ -227,8 +252,8 @@ create function public.notify_chat_reply() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   if new.reply_to is not null then
-    insert into public.notifications (user_id, kind, title, body, link)
-    select m.user_id, 'reply', left(new.author_name || ' replied to you', 200), left(new.body, 140), '/chat/' || r.slug
+    insert into public.notifications (user_id, kind, title, body, link, message_id)
+    select m.user_id, 'reply', left(new.author_name || ' replied to you', 200), left(new.body, 140), '/chat/' || r.slug, new.id
     from public.chat_messages m
     join public.chat_rooms r on r.id = new.room_id
     where m.id = new.reply_to and m.user_id <> new.user_id;
@@ -241,6 +266,19 @@ create trigger after_chat_message
   after insert on public.chat_messages
   for each row execute function public.notify_chat_reply();
 
+-- A removed message takes its words with it: replies keep only the fact that they were replies.
+create function public.scrub_replies() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.chat_messages set reply_author = null, reply_excerpt = null where reply_to = old.id;
+  return old;
+end;
+$$;
+
+create trigger before_chat_message_delete
+  before delete on public.chat_messages
+  for each row execute function public.scrub_replies();
+
 -- Publishing an announcement notifies everyone who can read it, once.
 create function public.notify_announcement() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -251,8 +289,8 @@ begin
   if tg_op = 'UPDATE' and old.published_at is not null then
     return new;
   end if;
-  insert into public.notifications (user_id, kind, title, body, link)
-  select p.id, 'announcement', left(new.title, 200), left(new.body, 140), '/dashboard'
+  insert into public.notifications (user_id, kind, title, body, link, announcement_id)
+  select p.id, 'announcement', left(new.title, 200), left(new.body, 140), '/dashboard', new.id
   from public.profiles p
   where new.course_id is null
      or exists (
@@ -267,17 +305,73 @@ create trigger on_announcement_published
   after insert or update of published_at on public.announcements
   for each row execute function public.notify_announcement();
 
+-- Admins hear about a message once, on its first open report, however many members report it.
 create function public.notify_report() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.notifications (user_id, kind, title, body, link)
-  select p.id, 'report', 'A message was reported', left(m.author_name || ': ' || m.body, 140), '/admin/reports'
+  if exists (
+    select 1 from public.chat_reports r
+    where r.message_id = new.message_id and r.id <> new.id and r.status = 'open'
+  ) then
+    return new;
+  end if;
+  insert into public.notifications (user_id, kind, title, body, link, message_id)
+  select p.id, 'report', 'A message was reported', left(m.author_name || ': ' || m.body, 140), '/admin/reports', new.message_id
   from public.profiles p
   join public.chat_messages m on m.id = new.message_id
   where p.role = 'admin';
   return new;
 end;
 $$;
+
+-- Profile pictures may only be the member's own upload in the avatars bucket, or, from Google sign-in,
+-- their Google picture. Anything else could track everyone who views it, or point back at this site.
+create function public.check_avatar_url() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  file text;
+begin
+  if new.avatar_url is null or (tg_op = 'UPDATE' and new.avatar_url is not distinct from old.avatar_url) then
+    return new;
+  end if;
+  if tg_op = 'INSERT'
+     and new.avatar_url ~ '^https://lh[0-9]\.googleusercontent\.com/[A-Za-z0-9._~/=-]+$'
+     and exists (select 1 from auth.users u where u.id = new.id and u.raw_app_meta_data ->> 'provider' = 'google') then
+    return new;
+  end if;
+  file := substring(new.avatar_url from '^https://[a-z0-9-]+\.supabase\.co/storage/v1/object/public/avatars/(.+)$');
+  if file ~ ('^' || new.id::text || '/[A-Za-z0-9._-]{1,200}$')
+     and exists (select 1 from storage.objects o where o.bucket_id = 'avatars' and o.name = file) then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    new.avatar_url := null;
+    return new;
+  end if;
+  raise exception 'That picture address is not allowed.' using errcode = '22023';
+end;
+$$;
+
+create trigger before_profile_avatar
+  before insert or update of avatar_url on public.profiles
+  for each row execute function public.check_avatar_url();
+
+-- Name and picture changes reach the member's past messages, so a removed photo stops showing.
+create function public.refresh_author_copies() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.chat_messages
+    set author_name = coalesce(nullif(new.full_name, ''), 'Member'), author_avatar = new.avatar_url
+    where user_id = new.id;
+  return new;
+end;
+$$;
+
+create trigger after_profile_identity
+  after update of full_name, avatar_url on public.profiles
+  for each row
+  when (new.full_name is distinct from old.full_name or new.avatar_url is distinct from old.avatar_url)
+  execute function public.refresh_author_copies();
 
 create trigger on_chat_report
   after insert on public.chat_reports
@@ -333,6 +427,18 @@ create policy "See own mutes, admins see all" on public.chat_mutes
 create policy "Admins manage mutes" on public.chat_mutes
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+-- A banned member keeps reading but can no longer change their name, bio or picture.
+drop policy "Update own profile" on public.profiles;
+create policy "Update own profile" on public.profiles
+  for update to authenticated
+  using (id = auth.uid() and not public.is_banned())
+  with check (id = auth.uid() and not public.is_banned());
+
+-- Rooms of unpublished courses stay hidden from members, in the database and not just on the page.
+drop policy "List rooms" on public.chat_rooms;
+create policy "List rooms" on public.chat_rooms
+  for select to authenticated using (course_id is null or public.course_is_visible(course_id));
+
 -- ---------------------------------------------------------------------------------------------
 -- File storage
 -- ---------------------------------------------------------------------------------------------
@@ -346,7 +452,7 @@ on conflict (id) do nothing;
 create policy "Members manage their own picture" on storage.objects
   for all to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
-  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text and not public.is_banned());
 
 create policy "Admins manage lesson files" on storage.objects
   for all to authenticated
